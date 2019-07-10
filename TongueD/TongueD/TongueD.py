@@ -29,7 +29,7 @@ def select_show_id(show, conn):
 
 def insert_show(show, conn):
     cur = conn.cursor()
-    cur.execute("INSERT INTO `tongue`.`shows` (`id`, `show_name`) VALUES ('', %s)", show)
+    cur.execute("INSERT INTO `tongue`.`shows` (`show_name`) VALUES (%s)", show)
     conn.commit()
     return cur.lastrowid
 
@@ -37,7 +37,7 @@ def insert_show(show, conn):
 def insert_season(season, show_id, conn):
     conn.commit()
     cur = conn.cursor()
-    cur.execute("INSERT INTO `tongue`.`seasons` (`id`, `season_name`, `show_id`) VALUES ('', %s, %s)", (str(season), str(show_id)))
+    cur.execute("INSERT INTO `tongue`.`seasons` (`season_name`, `show_id`) VALUES (%s, %s)", (str(season), str(show_id)))
     conn.commit()
     return cur.lastrowid
 
@@ -147,7 +147,7 @@ def prep_sql_movies(Movies_mnt, host, user, passwd, db):
                     group_ins = group
                 #print grouped, group_ins
                 try:
-                    cur.execute("INSERT INTO `tongue`.`movie_files` (`id`, `fullpath`, `filename`, `path_hash`, `grouped`, `group`, `dvd_raw`, `runtime`, `dimensions`, `codec`) VALUES (NULL, %s, %s, %s, %s, %s, %s, %s, %s, %s)", (fullpath.replace(os.path.dirname(root) ,""), file_, str(path_hash), grouped, group_ins, dvd_flag, length, dimensions, codec))
+                    cur.execute("INSERT INTO `tongue`.`movie_files` (`fullpath`, `filename`, `path_hash`, `grouped`, `group`, `dvd_raw`, `runtime`, `dimensions`, `codec`) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)", (fullpath.replace(os.path.dirname(root) ,""), file_, str(path_hash), grouped, group_ins, dvd_flag, length, dimensions, codec))
                 except cymysql.MySQLError, e:
                     print e
                 sys.stdout.write("`")
@@ -245,7 +245,7 @@ def prep_sql_shows(Shows_mnt, host, user, passwd, db):
                                     season_id = insert_season(season_folder.replace("'", "\\'").replace(" ", "\\ ").replace("-", "\-").replace("&", "\&").replace(")", "\)").replace("(", "\("), show_id, conn)
 
                                 try:
-                                    cur.execute("INSERT INTO `tongue`.`video_files` (`id`, `video`, `season_id`, `show_id`, `path_hash`, `runtime`, `dimensions`) VALUES (NULL, %s, %s, %s, %s, %s, %s )", (video.replace("'", "\\'").replace(" ", "\\ ").replace("-", "\-").replace("&", "\&").replace(")", "\)").replace("(", "\("), season_id, show_id, str(path_hash), length, dimensions))
+                                    cur.execute("INSERT INTO `tongue`.`video_files` (`video`, `season_id`, `show_id`, `path_hash`, `runtime`, `dimensions`) VALUES (%s, %s, %s, %s, %s, %s )", (video.replace("'", "\\'").replace(" ", "\\ ").replace("-", "\-").replace("&", "\&").replace(")", "\)").replace("(", "\("), season_id, show_id, str(path_hash), length, dimensions))
                                 except cymysql.MySQLError, e:
                                     print e
                                 else:
@@ -270,7 +270,7 @@ def prep_sql_shows(Shows_mnt, host, user, passwd, db):
                                 if season_id == 0:
                                     season_id = insert_season(season_folder.replace("'", "\\'").replace(" ", "\\ ").replace("-", "\-").replace("&", "\&").replace(")", "\)").replace("(", "\("), show_id, conn)
                                 try:
-                                    cur.execute("INSERT INTO `tongue`.`video_files` (`id`, `video`, `season_id`, `show_id`, `path_hash`) VALUES (NULL, %s, %s, %s, %s )", (video.replace("'", "\\'").replace(" ", "\\ ").replace("-", "\-").replace("&", "\&").replace(")", "\)").replace("(", "\("), season_id, show_id, str(path_hash)))
+                                    cur.execute("INSERT INTO `tongue`.`video_files` (`video`, `season_id`, `show_id`, `path_hash`) VALUES (%s, %s, %s, %s )", (video.replace("'", "\\'").replace(" ", "\\ ").replace("-", "\-").replace("&", "\&").replace(")", "\)").replace("(", "\("), season_id, show_id, str(path_hash)))
                                 except cymysql.MySQLError, e:
                                     print e
                                 sys.stdout.write(".")
@@ -315,7 +315,7 @@ def get_unused_feeds(conn):
     if row:
         return row
     else:
-        return 0
+        return []
 
 
 def ffserver_stats(ffservers):

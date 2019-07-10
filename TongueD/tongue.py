@@ -12,7 +12,7 @@ config = tcfg.ConfigMap("TongueDaemon")
 
 ffserver_stats(config['ffservers'])
 
-sys.exit(1)
+#sys.exit(1)
 
 #Connect to the MySQL Server, DB Name is Hard coded, not to be changed unless you go through all the code.
 #try:
