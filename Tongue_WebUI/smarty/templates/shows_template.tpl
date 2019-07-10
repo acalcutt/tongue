@@ -1,22 +1,45 @@
-<table style="border-width: 1px; border-spacing: 1px">
+<!-- disabled for now...
+<script type='text/javascript'>
+    $(document).ready(function(){
+        $('#showslist').on("click", 'a', function() {
+            $(this).addClass("active");
+            alert(this.id);
+            var parent_id = $(this).parent(this).parent().attr('id');
+            $('#showslist').not(document.getElementById( this.id )).removeClass("active");
+        });
+
+    });
+</script>-->
+<table class="shows_table">
     <tr>
-        <th style="width: 30%">Shows</th>
+        <th>Shows</th>
         <th>Season</th>
-        <th>Video Files</th>
+        <th>Episodes</th>
+        <th>Episode Details</th>
     </tr>
     <tr>
-        <td style="vertical-align:top;">
-            <div style="overflow-y:auto;width:300px;height:600px;">
+        <td class="shows_col">
+            <div id="showslist" class="shows_div">
                 <ul>
                     {foreach from=$shows item=show}
-                    <li><a class="links" href="javascript:ajaxpage('opt/seasons.php?show={$show.0}', 'seasoncolumn');">{$show.1}</a></li>
+                    <li id="show{$show.0}">|<>| <a id="show{$show.0}" href="javascript:ajaxpage('opt/seasons.php?show={$show.0}', 'seasoncolumn');">{$show.1}</a></li>
+                    {foreachelse}
+                        There are no shows indexed...
                     {/foreach}
                 </ul>
             </div>
         </td>
-        <td style="vertical-align: top" id="seasoncolumn">
+        <td class="season_col" >
+            <div id="seasoncolumn" class="season_div">
+            </div>
         </td>
-        <td style="text-align: right; vertical-align: top" id="videocolumn">
+        <td class="episode_col" >
+            <div id="episodecolumn" class="episode_div">
+            </div>
+        </td>
+        <td class="episode_details_col" >
+            <div id="episode_details" class="episode_details_div">
+            </div>
         </td>
     </tr>
 </table>
