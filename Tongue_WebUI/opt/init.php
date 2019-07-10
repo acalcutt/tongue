@@ -1,14 +1,15 @@
 <?php
 require "config.php";
-define('WWW_DIR', $_SERVER['DOCUMENT_ROOT']."/tongue_ui/");
-define('SMARTY_DIR', $smarty_lib);
+define('SMARTY_ROOT', $root_directory.'smarty/');
+define('SMARTY_DIR', SMARTY_ROOT.'libs/');
 
-require SMARTY_DIR.'Smarty.class.php';
+require SMARTY_DIR.'/Smarty.class.php';
 
 $smarty = new Smarty();
-
-$smarty->setTemplateDir( WWW_DIR."smarty/templates/");
-$smarty->setCompileDir( WWW_DIR."smarty/templates_c/" );
+$smarty->template_dir = SMARTY_ROOT.'/templates/';
+$smarty->compile_dir  = SMARTY_ROOT.'/templates_c/';
+$smarty->config_dir   = SMARTY_ROOT.'/configs/';
+$smarty->cache_dir    = SMARTY_ROOT.'/cache/';
 
 $dsn               = $service.':host='.$sqlhost.';dbname=tongue';
 $options = array(
