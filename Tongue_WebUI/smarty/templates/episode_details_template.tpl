@@ -5,7 +5,7 @@
     <tr>
         <td class="details_col">
             <div class="details_div">
-                <a href="opt/video_player.php?video_id={$file.id}&amp;table=video_files" onclick="return popitup('opt/video_player.php?video={$file.id}&amp;table=video_files')">Play!</a>
+                <a href="opt/video_player.php?video={$file.id}&amp;table=video_files" target="_blank")">Play!</a>
                 </br>
                 {$file.filename}
                 Episode Details:
