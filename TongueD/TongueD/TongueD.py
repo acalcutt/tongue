@@ -693,7 +693,7 @@ def tongue_socket(HOST, PORT): # A socket process that just listens and responds
 
 
 def play_file(feed, feed_server, seek, fullpath, bin_path):
-    command = 'python StreamThread.py -feed '+str(feed)+' -ffserver '+str(feed_server)+' -seek '+str(seek)+' -source '+str(fullpath)+' -binpath '+str(bin_path)
+    command = 'python StreamThread.py -feed '+str(feed)+' -ffserver '+str(feed_server)+' -seek '+str(seek)+' -source "'+str(fullpath)+'" -binpath '+str(bin_path)
     command = command.replace("&", "\&")
     print command
     subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
