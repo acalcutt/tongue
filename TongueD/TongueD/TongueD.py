@@ -17,166 +17,6 @@ def select_season_id(season, conn):
         return 0
 
 
-def check_feeds(ffserver_IP, ffserver_port, sql_host, sql_u, sql_p):
-    sconn = cymysql.connect(host=sql_host, user=sql_u, passwd=sql_p, db="tongue")
-    cur = sconn.cursor()
-    while 1:
-        sconn.commit()
-        time.sleep(0.5)
-        try:
-            html = urllib2.urlopen("http://"+ffserver_IP+":"+ffserver_port+"/stat.html")
-            html.getcode()
-        except urllib2.URLError:
-            print "ffserver is offline."
-            continue
-        soup = BeautifulSoup(html.read())
-        i = 0
-        ii_f = 0
-        jump = 0
-        stats = {"stats": {}}
-        all = soup.findAll("table")
-        len_supply = len(all)
-        for supply in all:
-            i += 1
-            if i == 1:
-                ii = -1
-                # Streams
-                stats['stats'].update({"Streams": {}})
-                for row in supply.findAll("tr"):
-                    iii = 0
-                    ii += 1
-                    if ii == 0:
-                        continue
-                    for item in row.findAll(text=True):
-                        if str(item) == " ":
-                            continue
-                        if jump > 0:
-                            jump -= 1
-                            continue
-                        comp = SM(None, str(item), "index.html").ratio()
-                        comp2 = SM(None, str(item), "stat.html").ratio()
-                        if comp == 1.0 or comp2 == 1.0:
-                            jump = 7
-                            continue
-                        if ii not in stats['stats']['Streams']:
-                            stats['stats']['Streams'].update({ii: {}})
-
-                        stats['stats']['Streams'][ii].update({iii: item})
-                        iii += 1
-            else:
-                if i != len_supply:
-                    # Feeds
-                    ii_ = -1
-                    if "Feeds" not in stats['stats']:
-                        stats['stats'].update({"Feeds": {}})
-
-                    stats['stats']['Feeds'].update({ii_f: {}})
-                    for row in supply.findAll("tr"):
-                        iii = 0
-                        ii_ += 1
-                        if ii_ == 0:
-                            continue
-                        for item in row.findAll(text=True):
-                            if str(item) == " ":
-                                continue
-                            if jump > 0:
-                                jump -= 1
-                                continue
-                            comp = SM(None, str(item), "Stream").ratio()
-                            if comp == 1.0:
-                                jump = 4
-                                continue
-                            if ii_ not in stats['stats']['Feeds'][ii_f]:
-                                stats['stats']['Feeds'][ii_f].update({ii_: {}})
-
-                            stats['stats']['Feeds'][ii_f][ii_].update({iii: item})
-                            iii += 1
-                    ii_f += 1
-                else:
-                    ii = -1
-                    # Connections
-                    stats['stats'].update({"Connections": {}})
-                    for row in supply.findAll("tr"):
-                        iii = 0
-                        ii += 1
-                        if ii == 0:
-                            continue
-                        for item in row.findAll(text=True):
-                            if str(item) == " ":
-                                continue
-                            if jump > 0:
-                                #jump -= 1
-                                continue
-                            comp = SM(None, str(item), "index.html").ratio()
-                            comp2 = SM(None, str(item), "stat.html").ratio()
-                            if comp == 1.0 or comp2 == 1.0:
-                                continue
-                            if ii not in stats['stats']['Connections']:
-                                stats['stats']['Connections'].update({ii: {}})
-
-                            stats['stats']['Connections'][ii].update({iii: item})
-                            iii += 1
-
-        temp = {}
-        i = 0
-        #print stats['stats']['Connections']
-        for key, conn in stats['stats']['Connections'].items():
-            if len(conn) < 8:
-                del stats['stats']['Connections'][key]
-                continue;
-            temp.update({i: {}})
-            temp[i].update(conn)
-            i += 1
-        del stats['stats']['Connections']
-        stats['stats']['Connections'] = {}
-        stats['stats']['Connections'].update(temp)
-
-        used_streams = {}
-        i = 0
-        for conn in stats['stats']['Connections'].values():
-            re1='.*?'	# Non-greedy match on filler
-            re2='(\\(.*\\))'	# Round Braces 1
-            rg = re.compile(re1+re2,re.IGNORECASE|re.DOTALL)
-            m = rg.search(conn[1])
-            if m:
-                continue
-
-            used_streams.update({i: {'feed':conn[1], 'dest':conn[2], 'http_stat': conn[4], 'sent': conn[7]}})
-            i += 1
-        used_streams = ordereddict.OrderedDict(sorted(used_streams.items(), key=lambda t: t[1]))
-        for key, stream in stats['stats']['Streams'].items():
-            #print "--------------"
-            flag = 0
-            for key, used in used_streams.items():
-                if SM(None, stream[0], used['feed']).ratio() == 1.0:
-                    #print "Feed " + str(stream[9]).strip() + " in use, Insert/Update its Data"
-                    flag = 1
-                    try:
-                        cur.execute("INSERT INTO `tongue`.`feeds` (`feed`, `feed_server`, `in_use`, `dest`, `http_stat`, `sent`) VALUES (%s, %s, 1, %s, %s, %s)", (str(stream[9]).strip(), ffserver_IP+":"+ffserver_port, str(used['dest']), str(used['http_stat']).strip(), str(used['sent']).strip()))
-                        sys.stdout.write("(+)")
-                        sys.stdout.flush()
-                    except cymysql.MySQLError:
-                        cur.execute("UPDATE `tongue`.`feeds` SET `in_use` = 1, `dest` = %s, `http_stat` = %s, `sent` = %s WHERE `feed` = %s", (str(used['dest']), str(used['http_stat']).strip(), str(used['sent']).strip(), str(stream[9]).strip() ))
-                        sys.stdout.write("[+]")
-                        sys.stdout.flush()
-                    sconn.commit()
-                    del used_streams[key]
-
-                    break
-            if flag == 0:
-                #print "Insert/Update Unused Feed: "+str(stream[9]).strip()
-                try:
-                    cur.execute("INSERT INTO `tongue`.`feeds` (`feed`, `feed_server`, `in_use`, `dest`, `http_stat`, `sent`) VALUES (%s, %s, 0, '', '', '')", (str(stream[9]).strip(), ffserver_IP+":"+ffserver_port ))
-                    sys.stdout.write("+")
-                    sys.stdout.flush()
-                except cymysql.MySQLError:
-                    cur.execute("UPDATE `tongue`.`feeds` SET `feed` = %s, `in_use` = 0, `dest` = '', `http_stat` = '', `sent` = '' where `feed` = %s", (str(stream[9]).strip() , str(stream[9]).strip()))
-                    sys.stdout.write("-")
-                    sys.stdout.flush()
-                sconn.commit()
-                continue
-
-
 def select_show_id(show, conn):
     cur = conn.cursor()
     cur.execute("SELECT `id` FROM `tongue`.`shows` WHERE `show_name` = %s", show)
@@ -189,7 +29,7 @@ def select_show_id(show, conn):
 
 def insert_show(show, conn):
     cur = conn.cursor()
-    cur.execute("INSERT INTO `tongue`.`shows` (`id`, `show_name`) VALUES ('', %s)", show)
+    cur.execute("INSERT INTO `tongue`.`shows` (`show_name`) VALUES (%s)", show)
     conn.commit()
     return cur.lastrowid
 
@@ -197,17 +37,19 @@ def insert_show(show, conn):
 def insert_season(season, show_id, conn):
     conn.commit()
     cur = conn.cursor()
-    cur.execute("INSERT INTO `tongue`.`seasons` (`id`, `season_name`, `show_id`) VALUES ('', %s, %s)", (str(season), str(show_id)))
+    cur.execute("INSERT INTO `tongue`.`seasons` (`season_name`, `show_id`) VALUES (%s, %s)", (str(season), str(show_id)))
     conn.commit()
     return cur.lastrowid
 
 
-def prep_sql_movies(Movies_mnt, conn):
-    cur = conn.cursor()
+def prep_sql_movies(Movies_mnt, host, user, passwd, db):
+
+    conn = cymysql.connect(host, user, passwd, db)
     #print [name for name in os.listdir(Movies_mnt) if os.path.isdir(Movies_mnt)]
     mnt_path = Movies_mnt.split('/')
     mnt_num = (len(mnt_path) - 1)
     while 1:
+        cur = conn.cursor()
         dvd_flag = 0
         grouped = 0
         group = 1
@@ -305,17 +147,19 @@ def prep_sql_movies(Movies_mnt, conn):
                     group_ins = group
                 #print grouped, group_ins
                 try:
-                    cur.execute("INSERT INTO `tongue`.`movie_files` (`id`, `fullpath`, `filename`, `path_hash`, `grouped`, `group`, `dvd_raw`, `runtime`, `dimensions`, `codec`) VALUES (NULL, %s, %s, %s, %s, %s, %s, %s, %s, %s)", (fullpath.replace(os.path.dirname(root) ,""), file_, str(path_hash), grouped, group_ins, dvd_flag, length, dimensions, codec))
+                    cur.execute("INSERT INTO `tongue`.`movie_files` (`fullpath`, `filename`, `path_hash`, `grouped`, `group`, `dvd_raw`, `runtime`, `dimensions`, `codec`) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)", (fullpath.replace(os.path.dirname(root) ,""), file_, str(path_hash), grouped, group_ins, dvd_flag, length, dimensions, codec))
                 except cymysql.MySQLError, e:
                     print e
                 sys.stdout.write("`")
                 sys.stdout.flush()
                 conn.commit()
                 #print len(path)*'---', file
+        cur.close()
         time.sleep(900)
 
 
-def prep_sql_shows(Shows_mnt, conn):
+def prep_sql_shows(Shows_mnt, host, user, passwd, db):
+    conn = cymysql.connect(host, user, passwd, db)
     cur = conn.cursor()
     while 1:
         ii = 0
@@ -401,7 +245,7 @@ def prep_sql_shows(Shows_mnt, conn):
                                     season_id = insert_season(season_folder.replace("'", "\\'").replace(" ", "\\ ").replace("-", "\-").replace("&", "\&").replace(")", "\)").replace("(", "\("), show_id, conn)
 
                                 try:
-                                    cur.execute("INSERT INTO `tongue`.`video_files` (`id`, `video`, `season_id`, `show_id`, `path_hash`, `runtime`, `dimensions`) VALUES (NULL, %s, %s, %s, %s, %s, %s )", (video.replace("'", "\\'").replace(" ", "\\ ").replace("-", "\-").replace("&", "\&").replace(")", "\)").replace("(", "\("), season_id, show_id, str(path_hash), length, dimensions))
+                                    cur.execute("INSERT INTO `tongue`.`video_files` (`video`, `season_id`, `show_id`, `path_hash`, `runtime`, `dimensions`) VALUES (%s, %s, %s, %s, %s, %s )", (video.replace("'", "\\'").replace(" ", "\\ ").replace("-", "\-").replace("&", "\&").replace(")", "\)").replace("(", "\("), season_id, show_id, str(path_hash), length, dimensions))
                                 except cymysql.MySQLError, e:
                                     print e
                                 else:
@@ -426,7 +270,7 @@ def prep_sql_shows(Shows_mnt, conn):
                                 if season_id == 0:
                                     season_id = insert_season(season_folder.replace("'", "\\'").replace(" ", "\\ ").replace("-", "\-").replace("&", "\&").replace(")", "\)").replace("(", "\("), show_id, conn)
                                 try:
-                                    cur.execute("INSERT INTO `tongue`.`video_files` (`id`, `video`, `season_id`, `show_id`, `path_hash`) VALUES (NULL, %s, %s, %s, %s )", (video.replace("'", "\\'").replace(" ", "\\ ").replace("-", "\-").replace("&", "\&").replace(")", "\)").replace("(", "\("), season_id, show_id, str(path_hash)))
+                                    cur.execute("INSERT INTO `tongue`.`video_files` (`video`, `season_id`, `show_id`, `path_hash`) VALUES (%s, %s, %s, %s )", (video.replace("'", "\\'").replace(" ", "\\ ").replace("-", "\-").replace("&", "\&").replace(")", "\)").replace("(", "\("), season_id, show_id, str(path_hash)))
                                 except cymysql.MySQLError, e:
                                     print e
                                 sys.stdout.write(".")
@@ -467,25 +311,355 @@ def get_unused_feeds(conn):
     cur = conn.cursor()
     cur.execute("SELECT * FROM `tongue`.`feeds` WHERE `in_use` != 1")
     row = cur.fetchall()
+    #print row
     if row:
         return row
     else:
-        return 0
+        return []
 
+
+def ffserver_stats(ffservers):
+    stats = {}
+    temp = {}
+    i = -1
+    #loop for each ffserver
+    for ffserver in ffservers:
+
+        #Test to see if it is online or not
+        try:
+            html = urllib2.urlopen("http://"+ffserver+"/stat.html")
+            #print html.getcode()
+        except urllib2.URLError:
+            print ffserver + " is offline."
+            return 0
+
+        i += 1
+        soup = BeautifulSoup(html.read())
+        stats[i] = {}
+        all = soup.findAll("tr")
+        c = 0
+        break_loop = 0
+        #go through the first table rows and get the available streams
+        for supply in all:
+            c += 1
+            ii = 0
+            for td in supply.findAll("td"):
+                if ii == 0:
+                    if td.text == 'stat.html':
+                        break_loop = 1
+                        break;
+                    else:
+                        stats[i][c] = {'name': '', 'served': '', 'bytes': '', 'format': '', 'Tbr': '', 'Vbr': '', 'Vcodec': '', 'Abr': '', 'Acodec': '', 'feed': '', 'input': 0, 'output': 0}
+                        stats[i][c]['name'] = td.text
+
+                elif ii == 1:
+                    stats[i][c]['served'] = td.text
+                elif ii == 2:
+                    stats[i][c]['bytes'] = td.text
+                elif ii == 3:
+                    stats[i][c]['format'] = td.text
+                elif ii == 4:
+                    stats[i][c]['Tbr'] = td.text
+                elif ii == 5:
+                    stats[i][c]['Vbr'] = td.text
+                elif ii == 6:
+                    stats[i][c]['Vcodec'] = td.text
+                elif ii == 7:
+                    stats[i][c]['Abr'] = td.text
+                elif ii == 8:
+                    stats[i][c]['Acodec'] = td.text
+                elif ii == 9:
+                    stats[i][c]['feed'] = td.text
+                ii += 1
+            if break_loop:
+                break_loop = 0
+                break
+
+        #now lets get the last table so we can get the current connections
+        tables = soup.findAll("table")[-1]
+        temp[i] = {}
+        cc = 0
+        for table in tables:
+            table_s = BeautifulSoup(str(table))
+            for tr in table_s.findAll("tr"):
+                iii = 0
+                cc += 1
+                tr_s = BeautifulSoup(str(tr))
+                for td in tr_s.findAll("td"):
+                    if td.text == "stat.html":
+                        break
+                    if iii == 1:
+                        temp[i][cc] = {'name':'', 'ip':'', 'proto':'', 'state':'', 'target':'', 'actual':'', 'tx':''}
+                        temp[i][cc]['name'] = td.text
+                    elif iii == 2:
+                        temp[i][cc]['ip'] = td.text
+                    elif iii == 3:
+                        temp[i][cc]['proto'] = td.text
+                    elif iii == 4:
+                        temp[i][cc]['state'] = td.text
+                    elif iii == 5:
+                        temp[i][cc]['target'] = td.text
+                    elif iii == 6:
+                        temp[i][cc]['actual'] = td.text
+                    elif iii == 7:
+                        temp[i][cc]['tx'] = td.text
+                    iii += 1
+    #now lets re-order the dicts so that they start with 0
+    i = 0
+    streams = {}
+    for key in temp:
+        ii = 0
+        streams[i] = {}
+        for key2 in stats[key]:
+            streams[i][ii] = stats[key][key2]
+            ii += 1
+        i += 1
+
+    i = 0
+    connections = {}
+    for key in temp:
+        ii = 0
+        connections[i] = {}
+        for key2 in temp[key]:
+            connections[i][ii] = temp[key][key2]
+            ii += 1
+        i += 1
+
+    #match up the connections with the streams.
+    for key in connections:
+        for v in connections[key]:
+            searched = search(streams[key], connections[key][v]['name'].strip("(input)"), 0)
+            print searched
+            streams[key][searched[0]]['feed_stats'] = connections[key][v]
+            if connections[key][v]['name'].strip("(input)")[0] == "f":
+                streams[key][searched[0]]['input'] = 1
+            else:
+                streams[key][searched[0]]['output'] = 1
+    return streams
+
+
+# To search a dict :: people = {0: {'name':'boo', 'age':22}, 1: {'name':'foo', 'age': 21}}
+# search(dict, 21, 0)
+# Returns: [1, 'age']
+def search(dict_, value, Recursive):
+    ret1 = []
+    for k in dict_:
+        if isinstance(dict_[k], dict):
+            ret_search = search(dict_[k], value, 1)
+            if ret_search == []:
+                continue
+            else:
+                ret1.append(k)
+                if isinstance(ret_search, list):
+                    ret1.append(ret_search[0])
+                    ret1.append(ret_search[1])
+                else:
+                    ret1.append(ret_search)
+        else:
+            if dict_[k] == value:
+                return k
+    return ret1
+
+
+def check_used_feeds(ffservers, sql_host, sql_u, sql_p):
+    sconn = cymysql.connect(host=sql_host, user=sql_u, passwd=sql_p, db="tongue")
+    cur = sconn.cursor()
+    #while 1:
+    sconn.commit()
+    time.sleep(0.5)
+    feeds = []
+    for ffserver in ffservers:
+        #print ffserver
+
+        try:
+            html = urllib2.urlopen("http://"+ffserver+"/stat.html")
+            #print html.getcode()
+
+        except urllib2.URLError:
+            print "ffserver is offline."
+            return 0
+
+        soup = BeautifulSoup(html.read())
+        i = 0
+        ii_f = 0
+        jump = 0
+        stats = {"stats": {}}
+        all = soup.findAll("table")
+        len_supply = len(all)
+        for supply in all:
+            i += 1
+            if i == 1:
+                ii = -1
+                # Streams
+                stats['stats'].update({"Streams": {}})
+                for row in supply.findAll("tr"):
+
+                    iii = 0
+                    ii += 1
+                    if ii == 0:
+                        continue
+                    for item in row.findAll(text=True):
+                        if str(item) == " ":
+                            continue
+                        if jump > 0:
+                            jump -= 1
+                            continue
+                        comp = SM(None, str(item), "index.html").ratio()
+                        comp2 = SM(None, str(item), "stat.html").ratio()
+                        if comp == 1.0 or comp2 == 1.0:
+                            jump = 7
+                            continue
+                        if ii not in stats['stats']['Streams']:
+                            stats['stats']['Streams'].update({ii: {}})
+
+                        stats['stats']['Streams'][ii].update({iii: item})
+                        iii += 1
+            else:
+                if i != len_supply:
+                    # Feeds
+                    ii_ = -1
+                    if "Feeds" not in stats['stats']:
+                        stats['stats'].update({"Feeds": {}})
+
+                    stats['stats']['Feeds'].update({ii_f: {}})
+                    for row in supply.findAll("tr"):
+                        iii = 0
+                        ii_ += 1
+                        if ii_ == 0:
+                            continue
+                        for item in row.findAll(text=True):
+                            if str(item) == " ":
+                                continue
+                            if jump > 0:
+                                jump -= 1
+                                continue
+                            comp = SM(None, str(item), "Stream").ratio()
+                            if comp == 1.0:
+                                jump = 4
+                                continue
+                            if ii_ not in stats['stats']['Feeds'][ii_f]:
+                                stats['stats']['Feeds'][ii_f].update({ii_: {}})
+
+                            stats['stats']['Feeds'][ii_f][ii_].update({iii: item})
+                            iii += 1
+                    ii_f += 1
+                else:
+                    ii = -1
+                    # Connections
+                    stats['stats'].update({"Connections": {}})
+                    for row in supply.findAll("tr"):
+                        iii = 0
+                        ii += 1
+                        if ii == 0:
+                            continue
+                        for item in row.findAll(text=True):
+                            if str(item) == " ":
+                                continue
+                            if jump > 0:
+                                #jump -= 1
+                                continue
+                            comp = SM(None, str(item), "index.html").ratio()
+                            comp2 = SM(None, str(item), "stat.html").ratio()
+                            if comp == 1.0 or comp2 == 1.0:
+                                continue
+                            if ii not in stats['stats']['Connections']:
+                                stats['stats']['Connections'].update({ii: {}})
+
+                            stats['stats']['Connections'][ii].update({iii: item})
+                            iii += 1
+        temp = {}
+        i = 0
+        #print stats['stats']['Connections']
+        for key, conn in stats['stats']['Connections'].items():
+            if len(conn) < 8:
+                del stats['stats']['Connections'][key]
+                continue;
+            temp.update({i: {}})
+            temp[i].update(conn)
+            i += 1
+        print temp
+        del stats['stats']['Connections']
+        stats['stats']['Connections'] = {}
+        stats['stats']['Connections'].update(temp)
+
+        used_streams = {}
+        i = 0
+        #print stats['stats']['Connections'].values()
+        for conn in stats['stats']['Connections'].values():
+            re1='.*?'	# Non-greedy match on filler
+            re2='(\\(.*\\))'	# Round Braces 1
+            rg = re.compile(re1+re2,re.IGNORECASE|re.DOTALL)
+            m = rg.search(conn[1])
+            if m:
+                continue
+
+            used_streams.update({i: {'feed':conn[1], 'dest':conn[2], 'http_stat': conn[4], 'sent': conn[7]}})
+            i += 1
+            #print i
+        used_streams_alt = ordereddict.OrderedDict(sorted(used_streams.items(), key=lambda t: t[1]))
+
+        for key, stream in stats['stats']['Streams'].items():
+            #print stream
+            flag = 0
+            feeds.append(ffserver+"/"+stream[9].strip("\n"))
+            #print used_streams
+            for key, used in used_streams.items():
+
+                #feeds.append([str(stream[9]).strip(), ffserver, str(used['dest']), str(used['http_stat']).strip(), str(used['sent']).strip()])
+                if SM(None, stream[0], used['feed']).ratio() == 1.0:
+                    #print "Feed " + str(stream[9]).strip() + " in use, Insert/Update its Data"
+                    flag = 1
+                    try:
+                        cur.execute("INSERT INTO `tongue`.`feeds` (`feed`, `feed_server`, `in_use`, `dest`, `http_stat`, `sent`) VALUES (%s, %s, 1, %s, %s, %s)",
+                                    (str(stream[9]).strip(), ffserver, str(used['dest']), str(used['http_stat']).strip(), str(used['sent']).strip()))
+                        sys.stdout.write("(+)")
+                        sys.stdout.flush()
+                    except cymysql.MySQLError:
+                        cur.execute("UPDATE `tongue`.`feeds` SET `in_use` = 1, `dest` = %s, `http_stat` = %s, `sent` = %s WHERE `feed` = %s",
+                                    (str(used['dest']), str(used['http_stat']).strip(), str(used['sent']).strip(), str(stream[9]).strip() ))
+                        sys.stdout.write("[+]")
+                        sys.stdout.flush()
+                    sconn.commit()
+                    del used_streams[key]
+
+                    break
+            if flag == 0:
+                #print "Insert/Update Unused Feed: "+str(stream[9]).strip()
+                try:
+                    cur.execute("INSERT INTO `tongue`.`feeds` (`feed`, `feed_server`, `in_use`, `dest`, `http_stat`, `sent`) VALUES (%s, %s, 0, '', '', '')",
+                                (str(stream[9]).strip(), ffserver ))
+                    sys.stdout.write("+")
+                    sys.stdout.flush()
+                except cymysql.MySQLError:
+                    cur.execute("UPDATE `tongue`.`feeds` SET `feed` = %s, `in_use` = 0, `dest` = '', `http_stat` = '', `sent` = '' where `feed` = %s",
+                                (str(stream[9]).strip() , str(stream[9]).strip()))
+                    sys.stdout.write("-")
+                    sys.stdout.flush()
+                sconn.commit()
+                continue
+
+    return feeds
 
 def clean_threads(unused_feeds, threads):
     rm = []
     procs = []
+    print "unused: "
+    print unused_feeds
+    print "threads: "
+    print threads
     for thread in threads:
         #continue
+        print "Thread: "
+        print threads[thread]
         for feed in unused_feeds:
             if threads[thread]['feed'] in feed:
-                #print thread['proc'].pid
                 first_letter = str(threads[thread]['feed'])[0:1]
                 alteredFeed = "["+first_letter+"]"+str(threads[thread]['feed'][1:])
                 #find all PIDs for the feed : ps ax|grep [f]eed%.ffm
+                print "ps -eo pid,command|grep "+alteredFeed
                 ps = subprocess.check_output("ps -eo pid,command|grep "+alteredFeed, shell=True).split("\n")
-                #print ps
+                print "PS details:"
+                print ps
                 for proc in ps:
                     proc = proc.lstrip().rstrip()
                     if proc == "":
@@ -510,7 +684,9 @@ def tongue_socket(HOST, PORT): # A socket process that just listens and responds
     s.listen(1) # Tell it to listen on that IP and Port
     while 1:
         conn, addr = s.accept() # Accept connection
-        print 'Connected by', addr
+        #print 'Connected by', addr
+        sys.stdout.write("~")
+        sys.stdout.flush()
         data = conn.recv(1024) #Look for 1k of data
         if not data: continue # if data is empty ignore
         conn.send(data) # if data is there, send it back
@@ -518,7 +694,7 @@ def tongue_socket(HOST, PORT): # A socket process that just listens and responds
 
 
 def play_file(feed, feed_server, seek, fullpath, bin_path):
-    command = 'python StreamThread.py -feed '+str(feed)+' -ffserver '+str(feed_server)+' -seek '+str(seek)+' -source '+str(fullpath)+' -binpath '+str(bin_path)
+    command = 'python StreamThread.py -feed '+str(feed)+' -ffserver '+str(feed_server)+' -seek '+str(seek)+' -source "'+str(fullpath)+'" -binpath '+str(bin_path)
     command = command.replace("&", "\&")
     print command
     subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)

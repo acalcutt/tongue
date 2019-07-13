@@ -21,11 +21,11 @@ videofile = os.path.normpath(args.source)
 seek_delta = "00:00:00"
 seek_to_fast = "00:00:00"
 other_options = "-ss " + str(seek_to_fast)
-options = "-ss "+ str(seek_delta)  # +" -trellis 1 -lmax 42000 "
+options = "-ss "+ str(seek_delta) + " -threads 6 -deadline realtime "
 ffm_output = " http://"+args.ffserver+"/"+args.feed
 
 
-command = args.binpath + "ffmpeg -threads 2 "+ other_options +" -i " + videofile.replace("'", "\\'").replace(" ", "\\ ").replace("-", "\-").replace("&", "\&") + " " + options + ffm_output
+command = args.binpath + "ffmpeg "+ other_options +" -i '" + videofile + "' " + options + ffm_output
 command = command.replace("&", "\&")
 print command
 process = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)

@@ -2,10 +2,18 @@ __author__ = 'pferland'
 import cymysql, time, os, sys, threading
 from TongueConfig  import *
 from TongueD import *
-print "Tongue Video Streaming Server V1.0 GPLv2 1/19/2014 by Phil Ferland (pferland@randomintervals.com)"
+print "Tongue Video Streaming Server V1.0 GPLv2 16/Mar/2014 by Phil Ferland (pferland@randomintervals.com)"
 
 tcfg = TongueConfig()
 config = tcfg.ConfigMap("TongueDaemon")
+
+#feeds = check_used_feeds(config['ffservers'], config['sql_host'], config['sql_user'], config['sql_pwd'] )
+#print feeds
+
+ffserver_stats(config['ffservers'])
+
+#sys.exit(1)
+
 #Connect to the MySQL Server, DB Name is Hard coded, not to be changed unless you go through all the code.
 #try:
 
@@ -19,6 +27,7 @@ print "\t(+)  = New Feed that is in use. (Feed Checker Thread)"
 print "\t[+]  = Update Feed that is in use. (Feed Checker Thread)"
 print "\t+    = New Feed that is not in use. (Feed Checker Thread)"
 print "\t-    = Feed that is not in use. (Feed Checker Thread)"
+print "\t|    = Next Feed Server being checked. (Feed Checker Thread)"
 print "\t<-#> = Feed marked as unused and threads killed. # is the thread number. (Main Thread cleaning up unused feeds)"
 print "\t,    = Sleep for main thread."
 print "\t.    = New item in the Shows search/preparing."
@@ -26,44 +35,39 @@ print "\t`    = New item in the Movies search/preparing.\n\n\n"
 
 print "Spawning Thread to check for updates to the Movies folders."
 #prep_sql_movies(config['movies_mnt'], conn)
-#feed_checker_thread = threading.Thread(name="Tongue Movie Indexer", target=prep_sql_movies, args=(config['movies_mnt'], cymysql.connect(host=config['sql_host'], user=config['sql_user'], passwd=config['sql_pwd'], db=config['db']) ))
-#feed_checker_thread.start()
+movie_folder_thread = threading.Thread(name="Tongue Movie Indexer", target=prep_sql_movies, args=(config['movies_mnt'], config['sql_host'], config['sql_user'], config['sql_pwd'], config['db'] ))
+movie_folder_thread.start()
 
 print "Spawning Thread to check for updates to the Shows folders."
-prep_sql_shows(config['shows_mnt'], conn)
-#feed_checker_thread = threading.Thread(name="Tongue Shows Indexer", target=prep_sql_shows, args=(config['shows_mnt'], cymysql.connect(host=config['sql_host'], user=config['sql_user'], passwd=config['sql_pwd'], db=config['db'])))
-#feed_checker_thread.start()
-
-sys.exit(1)
+#prep_sql_shows(config['shows_mnt'], conn)
+Shows_Folder_Thread = threading.Thread(name="Tongue Shows Indexer", target=prep_sql_shows, args=(config['shows_mnt'], config['sql_host'], config['sql_user'], config['sql_pwd'], config['db'] ))
+Shows_Folder_Thread.start()
 
 # Spawn the Feed Checker Thread
-feed_checker_thread = threading.Thread(name="Tongue Feed Checker Thread", target=check_feeds, args=(config['ffserver_ip'], config['ffserver_port'], config['sql_host'], config['sql_user'], config['sql_pwd'] ))
-feed_checker_thread.start()
+#feed_checker_thread = threading.Thread(name="Tongue Feed Checker Thread", target=check_feeds, args=(config['ffserver_ip'], config['ffserver_port'], config['sql_host'], config['sql_user'], config['sql_pwd'] ))
+#feed_checker_thread.start()
 
-feed_checker_thread = threading.Thread(name="Tongue Status Socket", target=tongue_socket, args=(config['tongue_ip'], int(config['tongue_port'])))
-feed_checker_thread.start()
+print "Spawning Thread for status socket."
+Status_thread = threading.Thread(name="Tongue Status Socket", target=tongue_socket, args=(config['tongue_ip'], int(config['tongue_port'])))
+Status_thread.start()
 
+print "Start main thread"
 player_threads = {} # Start the list for the Video Feed Threads
-
-#TODO: WIP - Feed to play_file thread so when someone disconnects the ffmpeg process can get killed and feed freed up
-#TODO: WIP - Screenshot images from the video files. Screenshots are taken and stored, just need to implement the usage on the front end
-#TODO: NS  - Need to wait for stream to change to WAIT_FEED then you can send the next video.
-#TODO: NS  - Concat CD1 - CD2 based movies into one stream
-#TODO: NS  - Stream DVD VIDEO_TS/*.VOB Main Title
-#TODO: NS  - Find a way to do time seeks
-#TODO: NS  - Find a way to do playlists
-#TODO: NS  - Figure out how to do multiple ffserver feed servers
 i = 1
 while 1:
     waiting = fetch_waiting(conn) #Check for videos that need to be streamed
     #print waiting
     if not waiting: # If fetch_waiting returns 0, check to see if any feeds are unused
         time.sleep(1)
+        feeds = check_used_feeds(config['ffservers'], config['sql_host'], config['sql_user'], config['sql_pwd'] )
+        print "feeds: "
+        print feeds
+
         unused_feeds = get_unused_feeds(conn) # Get the Unused feeds
-        removed = clean_threads(unused_feeds, player_threads)# check them against running ffmpeg input threads
         #print unused_feeds
+        removed = clean_threads(unused_feeds, player_threads)# check them against running ffmpeg input threads
         for rm in removed:
-            print rm
+            #print rm
             del player_threads[rm]
         #print player_threads
         sys.stdout.write(",")
